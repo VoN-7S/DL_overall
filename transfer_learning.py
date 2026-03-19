@@ -205,7 +205,6 @@ def train_one_epoch(
     model.train()
     total_loss, correct, n = 0.0, 0, 0
     for imgs, labels in loader:
-        print("batch")
         imgs, labels = imgs.to(device), labels.to(device)
         optimizer.zero_grad()
         out  = model(imgs)
@@ -331,15 +330,14 @@ def run_one_option(
             torch.save(best_weights, os.path.join(save_dir, "model.pth"))
             print("    Checkpoint saved (val_acc=" + str(round(best_acc, 4)) + ")")
 
-    print("\n  Best val accuracy: " + str(round(best_acc, 4)))
-
-    save_results(
-        params     = {**asdict(transfer_cfg), **asdict(training_cfg)},
-        tloss_list = train_losses,
-        vloss_list = val_losses,
-        save_dir   = save_dir,
-        name       = folder_name,
-    )
+        save_results(
+            params     = {**asdict(transfer_cfg), **asdict(training_cfg)},
+            tloss_list = train_losses,
+            vloss_list = val_losses,
+            save_dir   = save_dir,
+            name       = folder_name,
+        )
+        print("\n  Best val accuracy: " + str(round(best_acc, 4)))
 
 
 def run_transfer(params: Namespace) -> None:

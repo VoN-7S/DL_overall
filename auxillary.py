@@ -81,7 +81,7 @@ def save_results(
     json_path = os.path.join(save_dir, name + "_params.json")
     with open(json_path, "w") as f:
         json.dump(params, f, indent=2)
-    print("Parameters saved -> " + json_path)
+
 
     epochs = range(1, len(tloss_list) + 1)
     plt.figure()
@@ -96,4 +96,3 @@ def save_results(
     png_path = os.path.join(save_dir, name + "_train_val.png")
     plt.savefig(png_path, bbox_inches="tight")
     plt.close()
-    print("Loss curve saved -> " + png_path)

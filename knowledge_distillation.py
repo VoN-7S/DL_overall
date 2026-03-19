@@ -357,20 +357,21 @@ def validate(
 #  FLOPs reporting
 # ==============================================================================
 
-def report_flops(model: nn.Module, input_shape: Tuple, name: str) -> None:
+def report_flops(model: nn.Module, input_shape: Tuple, name: str) -> dict:
     """
-    Print MACs and parameter count for a model using ptflops.
-
-    Skips silently if ptflops is not installed.
+    Print and return MACs and parameter count for a model using ptflops.
 
     Args:
         model:       Network to profile.
         input_shape: Input shape excluding batch dim, e.g. (3, 32, 32).
         name:        Display name for the printout.
+
+    Returns:
+        Dict with keys macs and params, or empty dict if ptflops not installed.
     """
     if not _PTFLOPS:
         print("  [FLOPs] Skipped for " + name + " -- pip install ptflops")
-        return
+        return {}
     macs, params = get_model_complexity_info(
         model, input_shape,
         as_strings=True,
@@ -380,6 +381,7 @@ def report_flops(model: nn.Module, input_shape: Tuple, name: str) -> None:
     print("\n  -- " + name + " --")
     print("     MACs   : " + str(macs))
     print("     Params : " + str(params))
+    return {"macs": macs, "params": params}
 
 
 # ==============================================================================
@@ -412,9 +414,6 @@ def run_exp1(
         lr=training_cfg.learning_rate,
         weight_decay=training_cfg.weight_decay,
     )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=training_cfg.epoch
-    )
     train_loader, val_loader = get_loaders(training_cfg)
 
     best_acc               = 0.0
@@ -429,7 +428,6 @@ def run_exp1(
     for epoch in range(1, training_cfg.epoch + 1):
         tr_loss, tr_acc   = train_standard(model, train_loader, optimizer, criterion, device)
         val_loss, val_acc = validate(model, val_loader, device)
-        scheduler.step()
 
         train_losses.append(tr_loss)
         val_losses.append(val_loss)
@@ -448,14 +446,15 @@ def run_exp1(
             torch.save(best_weights, os.path.join(save_dir, "model.pth"))
             print("    Checkpoint saved (val_acc=" + str(round(best_acc, 4)) + ")")
 
-    print("\n  Best val accuracy: " + str(round(best_acc, 4)))
-    save_results(
-        params     = {**asdict(kd_cfg), **asdict(training_cfg)},
-        tloss_list = train_losses,
-        vloss_list = val_losses,
-        save_dir   = save_dir,
-        name       = "kd_simplecnn_scratch",
-    )
+
+        save_results(
+            params     = {**asdict(kd_cfg), **asdict(training_cfg)},
+            tloss_list = train_losses,
+            vloss_list = val_losses,
+            save_dir   = save_dir,
+            name       = "kd_simplecnn_scratch",
+        )
+        print("\n  Best val accuracy: " + str(round(best_acc, 4)))
 
 
 def run_exp2(
@@ -499,9 +498,7 @@ def run_exp2(
             lr=training_cfg.learning_rate,
             weight_decay=training_cfg.weight_decay,
         )
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=training_cfg.epoch
-        )
+
         train_loader, val_loader = get_loaders(training_cfg)
 
         best_acc               = 0.0
@@ -516,7 +513,7 @@ def run_exp2(
         for epoch in range(1, training_cfg.epoch + 1):
             tr_loss, tr_acc   = train_standard(model, train_loader, optimizer, criterion, device)
             val_loss, val_acc = validate(model, val_loader, device)
-            scheduler.step()
+
 
             train_losses.append(tr_loss)
             val_losses.append(val_loss)
@@ -536,14 +533,15 @@ def run_exp2(
                 torch.save(best_weights, ckpt_path)
                 print("    Checkpoint saved (val_acc=" + str(round(best_acc, 4)) + ")")
 
-        print("\n  Best val accuracy (" + label + "): " + str(round(best_acc, 4)))
-        save_results(
-            params     = {**asdict(kd_cfg), **asdict(training_cfg)},
-            tloss_list = train_losses,
-            vloss_list = val_losses,
-            save_dir   = save_dir,
-            name       = "kd_resnet_" + suffix,
-        )
+            save_results(
+                params     = {**asdict(kd_cfg), **asdict(training_cfg)},
+                tloss_list = train_losses,
+                vloss_list = val_losses,
+                save_dir   = save_dir,
+                name       = "kd_resnet_" + suffix,
+            )
+            print("\n  Best val accuracy (" + label + "): " + str(round(best_acc, 4)))
+
 
     return path_no_ls, path_ls
 
@@ -624,17 +622,22 @@ def run_exp3(
             torch.save(best_weights, os.path.join(save_dir, "model.pth"))
             print("    Checkpoint saved (val_acc=" + str(round(best_acc, 4)) + ")")
 
-    print("\n  Best val accuracy: " + str(round(best_acc, 4)))
-    report_flops(teacher, (3, 32, 32), "ResNet-18 (teacher)")
-    report_flops(student, (3, 32, 32), "SimpleCNN (student)")
+        teacher_flops = report_flops(teacher, (3, 32, 32), "ResNet-18 (teacher)")
+        student_flops = report_flops(student, (3, 32, 32), "SimpleCNN (student)")
 
-    save_results(
-        params     = {**asdict(kd_cfg), **asdict(training_cfg)},
-        tloss_list = train_losses,
-        vloss_list = val_losses,
-        save_dir   = save_dir,
-        name       = "kd_simplecnn_kd",
-    )
+        save_results(
+            params     = {**asdict(kd_cfg),
+                          **asdict(training_cfg),
+                          "teacher_flops": teacher_flops,
+                          "student_flops": student_flops
+                          },
+            tloss_list = train_losses,
+            vloss_list = val_losses,
+            save_dir   = save_dir,
+            name       = "kd_simplecnn_kd",
+        )
+    print("\n  Best val accuracy: " + str(round(best_acc, 4)))
+
 
 
 def run_exp4(
@@ -674,9 +677,7 @@ def run_exp4(
         lr=training_cfg.learning_rate,
         weight_decay=training_cfg.weight_decay,
     )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=training_cfg.epoch
-    )
+
     train_loader, val_loader = get_loaders(training_cfg)
 
     best_acc               = 0.0
@@ -701,7 +702,6 @@ def run_exp4(
             kd_cfg, device, use_modified=True,
         )
         val_loss, val_acc = validate(student, val_loader, device)
-        scheduler.step()
 
         train_losses.append(tr_loss)
         val_losses.append(val_loss)
@@ -720,17 +720,21 @@ def run_exp4(
             torch.save(best_weights, os.path.join(save_dir, "model.pth"))
             print("    Checkpoint saved (val_acc=" + str(round(best_acc, 4)) + ")")
 
-    print("\n  Best val accuracy: " + str(round(best_acc, 4)))
-    report_flops(teacher, (3, 32, 32), "ResNet-18   (teacher)")
-    report_flops(student, (3, 32, 32), "MobileNetV2 (student)")
+        teacher_flops = report_flops(teacher, (3, 32, 32), "ResNet-18 (teacher)")
+        student_flops = report_flops(student, (3, 32, 32), "MobileNetV2 (student)")
 
-    save_results(
-        params     = {**asdict(kd_cfg), **asdict(training_cfg)},
-        tloss_list = train_losses,
-        vloss_list = val_losses,
-        save_dir   = save_dir,
-        name       = "kd_mobilenet",
-    )
+        save_results(
+            params     = {**asdict(kd_cfg), 
+                          **asdict(training_cfg),
+                          "teacher_flops": teacher_flops,
+                          "student_flops": student_flops
+                          },
+            tloss_list = train_losses,
+            vloss_list = val_losses,
+            save_dir   = save_dir,
+            name       = "kd_mobilenet",
+        )
+    print("\n  Best val accuracy: " + str(round(best_acc, 4)))
 
 
 # ==============================================================================
