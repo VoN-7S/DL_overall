@@ -135,7 +135,7 @@ def run_exp1(
     os.makedirs(save_dir, exist_ok=True)
     set_seed(training_cfg.seed)
 
-    model     = SimpleCNN(num_classes=10).to(device)
+    model = SimpleCNN(num_classes=10).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(
         model.parameters(),
@@ -173,7 +173,7 @@ def run_exp1(
         )
 
         if val_acc > best_acc:
-            best_acc     = val_acc
+            best_acc = val_acc
             best_weights = deepcopy(model.state_dict())
             torch.save(best_weights, os.path.join(save_dir, "model.pth"))
             print("    Checkpoint saved (val_acc=" + str(round(best_acc, 4)) + ")")
@@ -217,9 +217,9 @@ def run_exp2(
 
     for use_ls in [False, True]:
         set_seed(training_cfg.seed)
-        label     = "with label smoothing" if use_ls else "no label smoothing"
-        suffix    = "ls" if use_ls else "no_ls"
-        model     = ResNet(BasicBlock, [2, 2, 2, 2], num_classes=10).to(device)
+        label = "with label smoothing" if use_ls else "no label smoothing"
+        suffix = "ls" if use_ls else "no_ls"
+        model = ResNet(BasicBlock, [2, 2, 2, 2], num_classes=10).to(device)
         criterion = (
             LabelSmoothingLoss(10, kd_cfg.smoothing)
             if use_ls else nn.CrossEntropyLoss()
@@ -241,7 +241,7 @@ def run_exp2(
         print("="*55)
 
         for epoch in range(1, training_cfg.epoch + 1):
-            tr_loss, tr_acc   = train_one_epoch(model, train_loader, optimizer, criterion, device)
+            tr_loss, tr_acc = train_one_epoch(model, train_loader, optimizer, criterion, device)
             val_loss, val_acc = validate(model, val_loader, criterion, device)
 
             train_losses.append(tr_loss)
@@ -256,9 +256,9 @@ def run_exp2(
             )
 
             if val_acc > best_acc:
-                best_acc     = val_acc
+                best_acc = val_acc
                 best_weights = deepcopy(model.state_dict())
-                ckpt_path    = os.path.join(save_dir, "model_" + suffix + ".pth")
+                ckpt_path = os.path.join(save_dir, "model_" + suffix + ".pth")
                 torch.save(best_weights, ckpt_path)
                 print("    Checkpoint saved (val_acc=" + str(round(best_acc, 4)) + ")")
 
@@ -302,7 +302,7 @@ def run_exp3(
     teacher.eval()
     print("  Teacher loaded: " + teacher_path)
 
-    student   = SimpleCNN(num_classes=10).to(device)
+    student = SimpleCNN(num_classes=10).to(device)
     optimizer = torch.optim.Adam(
         student.parameters(),
         lr=training_cfg.learning_rate,
@@ -327,7 +327,7 @@ def run_exp3(
     print("="*55)
 
     for epoch in range(1, training_cfg.epoch + 1):
-        tr_loss, tr_acc   = train_one_epoch(
+        tr_loss, tr_acc = train_one_epoch(
             student, train_loader, optimizer, hinton_kd_loss, device, teacher=teacher, kd_cfg= kd_cfg
         )
         val_loss, val_acc = validate(student, val_loader, hinton_kd_loss, device)
@@ -344,7 +344,7 @@ def run_exp3(
         )
 
         if val_acc > best_acc:
-            best_acc     = val_acc
+            best_acc = val_acc
             best_weights = deepcopy(student.state_dict())
             torch.save(best_weights, os.path.join(save_dir, "model.pth"))
             print("    Checkpoint saved (val_acc=" + str(round(best_acc, 4)) + ")")

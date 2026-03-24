@@ -171,7 +171,7 @@ def run_one_option(
     set_seed(training_cfg.seed)
 
     folder_name = "transfer_resize" if transfer_cfg.option == 1 else "transfer_layerchange"
-    save_dir    = os.path.join("./results/transfer", folder_name)
+    save_dir = os.path.join("./results/transfer", folder_name)
     os.makedirs(save_dir, exist_ok=True)
 
     if transfer_cfg.option == 1:
