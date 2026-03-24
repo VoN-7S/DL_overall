@@ -86,61 +86,6 @@ def get_loaders(
 
 
 # ==============================================================================
-#  Training and validation
-# ==============================================================================
-
-
-def train_kd(
-    student: nn.Module,
-    teacher: nn.Module,
-    loader: DataLoader,
-    optimizer: torch.optim.Optimizer,
-    kd_cfg: KDConfig,
-    device: torch.device,
-    use_modified: bool,
-) -> Tuple[float, float]:
-    """
-    One epoch of knowledge distillation training.
-
-    The teacher is always frozen in eval mode. Only the student receives
-    gradient updates.
-
-    Args:
-        student:      Student model in training mode.
-        teacher:      Frozen teacher model in eval mode.
-        loader:       Training DataLoader.
-        optimizer:    Student optimiser.
-        kd_cfg:       KDConfig with temperature and alpha.
-        device:       Compute device.
-        use_modified: Use modified KD loss if True, Hinton loss if False.
-
-    Returns:
-        Tuple of (average_loss, accuracy) for the student this epoch.
-    """
-    student.train()
-    teacher.eval()
-    loss_fn = modified_kd_loss if use_modified else hinton_kd_loss
-    total_loss, correct, n = 0.0, 0, 0
-
-    for imgs, labels in loader:
-        imgs, labels = imgs.to(device), labels.to(device)
-        optimizer.zero_grad()
-        s_logits = student(imgs)
-        with torch.no_grad():
-            t_logits = teacher(imgs)
-        loss = loss_fn(
-            s_logits, t_logits, labels,
-            kd_cfg.temperature, kd_cfg.alpha,
-        )
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item() * imgs.size(0)
-        correct    += s_logits.argmax(1).eq(labels).sum().item()
-        n          += imgs.size(0)
-    return total_loss / n, correct / n
-
-
-# ==============================================================================
 #  FLOPs reporting
 # ==============================================================================
 
