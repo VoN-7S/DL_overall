@@ -1,38 +1,3 @@
-"""
-knowledge_distillation.py
---------------------------
-Everything related to knowledge distillation on CIFAR-10 (HW1b Part B).
-
-Four experiments run in sequence or individually via --kd_experiment:
-
-    Exp 1 (kd_simplecnn_scratch):
-        Train SimpleCNN from scratch with standard cross-entropy.
-
-    Exp 2 (kd_resnet):
-        Train ResNet-18 with and without label smoothing.
-        Both models saved in the same folder with distinct names.
-
-    Exp 3 (kd_simplecnn_kd):
-        Train SimpleCNN using the best ResNet-18 from Exp 2 as teacher.
-        Uses Hinton knowledge distillation loss.
-
-    Exp 4 (kd_mobilenet):
-        Train MobileNetV2 using the best ResNet-18 from Exp 2 as teacher.
-        Uses modified KD loss where only the true class gets the teacher
-        probability and remaining mass is spread uniformly.
-
-Results saved to:
-    results/kd/kd_simplecnn_scratch/
-    results/kd/kd_resnet/
-    results/kd/kd_simplecnn_kd/
-    results/kd/kd_mobilenet/
-
-Usage
------
-    python main.py --task distillation --epoch 30
-    python main.py --task distillation --kd_experiment 3
-"""
-
 import os
 from copy import deepcopy
 from dataclasses import asdict
@@ -46,11 +11,14 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
+from test import validate
+from train import train_one_epoch
 from models.SimpleCNN import SimpleCNN
 from models.ResNet import ResNet, BasicBlock
 from models.mobilenet import MobileNetV2
 from parameters import KDConfig, TrainingConfig, get_kd_config, get_training_configs
 from auxillary import set_seed, get_device, save_results
+from loss_functions import *
 
 try:
     from ptflops import get_model_complexity_info
@@ -60,7 +28,7 @@ except ImportError:
 
 
 # ==============================================================================
-#  Dataset statistics
+#  Dataset Stats
 # ==============================================================================
 
 _CIFAR_MEAN = (0.4914, 0.4822, 0.4465)
@@ -68,7 +36,7 @@ _CIFAR_STD  = (0.2023, 0.1994, 0.2010)
 
 
 # ==============================================================================
-#  Data loading
+#  Data Loading
 # ==============================================================================
 
 def get_loaders(
@@ -76,9 +44,6 @@ def get_loaders(
 ) -> Tuple[DataLoader, DataLoader]:
     """
     Build CIFAR-10 train and validation DataLoaders.
-
-    Applies RandomCrop and RandomHorizontalFlip for training augmentation.
-    Validation uses only ToTensor and normalisation.
 
     Args:
         kd_cfg:       KDConfig with data_dir.
@@ -121,157 +86,8 @@ def get_loaders(
 
 
 # ==============================================================================
-#  Loss functions
-# ==============================================================================
-
-class LabelSmoothingLoss(nn.Module):
-    """
-    Cross-entropy loss with label smoothing.
-
-    The true class gets probability (1 - smoothing) and each other class
-    gets smoothing / (C - 1). Prevents the model from becoming overconfident.
-
-    Reference: Szegedy et al. (2016), Rethinking the Inception Architecture.
-
-    Args:
-        num_classes: Total number of output classes C.
-        smoothing:   Smoothing factor in range [0, 1). 0 = standard CE.
-    """
-
-    def __init__(self, num_classes: int, smoothing: float = 0.1) -> None:
-        super().__init__()
-        self.num_classes = num_classes
-        self.smoothing   = smoothing
-
-    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        """
-        Compute smoothed cross-entropy loss.
-
-        Args:
-            logits:  Raw model outputs of shape (N, C).
-            targets: True class indices of shape (N,).
-
-        Returns:
-            Scalar smoothed cross-entropy loss.
-        """
-        confidence = 1.0 - self.smoothing
-        smooth_val = self.smoothing / (self.num_classes - 1)
-        soft = torch.full_like(logits, smooth_val)
-        soft.scatter_(1, targets.unsqueeze(1), confidence)
-        return -(soft * F.log_softmax(logits, dim=1)).sum(dim=1).mean()
-
-
-def hinton_kd_loss(
-    s_logits: torch.Tensor,
-    t_logits: torch.Tensor,
-    labels: torch.Tensor,
-    temperature: float,
-    alpha: float,
-) -> torch.Tensor:
-    """
-    Hinton knowledge distillation loss.
-
-    Combines soft loss (KL divergence between temperature-scaled teacher
-    and student) with hard loss (standard cross-entropy against true labels).
-
-    Total = alpha * T^2 * KL(teacher || student) + (1 - alpha) * CE
-
-    Reference: Hinton et al. (2015), Distilling the Knowledge in a Neural Network.
-
-    Args:
-        s_logits:    Student logits of shape (N, C).
-        t_logits:    Teacher logits of shape (N, C).
-        labels:      True class indices of shape (N,).
-        temperature: Softening temperature T.
-        alpha:       Weight on the soft-target loss.
-
-    Returns:
-        Scalar combined KD loss.
-    """
-    soft_s = F.log_softmax(s_logits / temperature, dim=1)
-    soft_t = F.softmax(t_logits    / temperature, dim=1)
-    kd     = F.kl_div(soft_s, soft_t, reduction="batchmean") * (temperature ** 2)
-    ce     = F.cross_entropy(s_logits, labels)
-    return alpha * kd + (1.0 - alpha) * ce
-
-
-def modified_kd_loss(
-    s_logits: torch.Tensor,
-    t_logits: torch.Tensor,
-    labels: torch.Tensor,
-    temperature: float,
-    alpha: float,
-) -> torch.Tensor:
-    """
-    Modified KD loss using teacher confidence on the true class only.
-
-    For each sample with true class y:
-        target[y]    = softmax(teacher / T)[y]
-        target[j!=y] = (1 - target[y]) / (C - 1)
-
-    Encodes per-example difficulty while keeping wrong-class targets uniform.
-
-    Args:
-        s_logits:    Student logits of shape (N, C).
-        t_logits:    Teacher logits of shape (N, C).
-        labels:      True class indices of shape (N,).
-        temperature: Softening temperature T applied to teacher.
-        alpha:       Weight on the soft-target loss.
-
-    Returns:
-        Scalar combined modified KD loss.
-    """
-    N, C    = s_logits.shape
-    t_probs = F.softmax(t_logits / temperature, dim=1)
-    p_true  = t_probs.gather(1, labels.unsqueeze(1))
-
-    uniform_other = (1.0 - p_true) / (C - 1)
-    soft          = uniform_other.expand(N, C).clone()
-    soft.scatter_(1, labels.unsqueeze(1), p_true)
-
-    log_s = F.log_softmax(s_logits / temperature, dim=1)
-    kd    = F.kl_div(log_s, soft, reduction="batchmean") * (temperature ** 2)
-    ce    = F.cross_entropy(s_logits, labels)
-    return alpha * kd + (1.0 - alpha) * ce
-
-
-# ==============================================================================
 #  Training and validation
 # ==============================================================================
-
-def train_standard(
-    model: nn.Module,
-    loader: DataLoader,
-    optimizer: torch.optim.Optimizer,
-    criterion: nn.Module,
-    device: torch.device,
-) -> Tuple[float, float]:
-    """
-    One epoch of standard or label-smoothed training.
-
-    Args:
-        model:     Neural network in training mode.
-        loader:    Training DataLoader.
-        optimizer: Optimiser for weight updates.
-        criterion: Loss function (CE or LabelSmoothingLoss).
-        device:    Compute device.
-
-    Returns:
-        Tuple of (average_loss, accuracy) for this epoch.
-    """
-    model.train()
-    total_loss, correct, n = 0.0, 0, 0
-    for imgs, labels in loader:
-        imgs, labels = imgs.to(device), labels.to(device)
-        optimizer.zero_grad()
-        out  = model(imgs)
-        loss = criterion(out, labels)
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item() * imgs.size(0)
-        correct    += out.argmax(1).eq(labels).sum().item()
-        n          += imgs.size(0)
-    return total_loss / n, correct / n
 
 
 def train_kd(
@@ -324,54 +140,22 @@ def train_kd(
     return total_loss / n, correct / n
 
 
-@torch.no_grad()
-def validate(
-    model: nn.Module,
-    loader: DataLoader,
-    device: torch.device,
-) -> Tuple[float, float]:
-    """
-    Evaluate the model on the validation set using standard CE loss.
-
-    Args:
-        model:  Neural network in eval mode.
-        loader: Validation DataLoader.
-        device: Compute device.
-
-    Returns:
-        Tuple of (average_loss, accuracy) over the validation set.
-    """
-    model.eval()
-    total_loss, correct, n = 0.0, 0, 0
-    for imgs, labels in loader:
-        imgs, labels = imgs.to(device), labels.to(device)
-        out  = model(imgs)
-        loss = F.cross_entropy(out, labels)
-        total_loss += loss.item() * imgs.size(0)
-        correct    += out.argmax(1).eq(labels).sum().item()
-        n          += imgs.size(0)
-    return total_loss / n, correct / n
-
-
 # ==============================================================================
 #  FLOPs reporting
 # ==============================================================================
 
-def report_flops(model: nn.Module, input_shape: Tuple, name: str) -> dict:
+def report_flops(model: nn.Module, input_shape: Tuple, name: str) -> None:
     """
-    Print and return MACs and parameter count for a model using ptflops.
+    Print MACs and parameter count for a model using ptflops.
 
     Args:
         model:       Network to profile.
         input_shape: Input shape excluding batch dim, e.g. (3, 32, 32).
         name:        Display name for the printout.
-
-    Returns:
-        Dict with keys macs and params, or empty dict if ptflops not installed.
     """
     if not _PTFLOPS:
         print("  [FLOPs] Skipped for " + name + " -- pip install ptflops")
-        return {}
+        return
     macs, params = get_model_complexity_info(
         model, input_shape,
         as_strings=True,
@@ -381,7 +165,6 @@ def report_flops(model: nn.Module, input_shape: Tuple, name: str) -> dict:
     print("\n  -- " + name + " --")
     print("     MACs   : " + str(macs))
     print("     Params : " + str(params))
-    return {"macs": macs, "params": params}
 
 
 # ==============================================================================
@@ -414,20 +197,24 @@ def run_exp1(
         lr=training_cfg.learning_rate,
         weight_decay=training_cfg.weight_decay,
     )
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=training_cfg.epoch
+    )
     train_loader, val_loader = get_loaders(training_cfg)
 
-    best_acc               = 0.0
-    best_weights           = None
+    best_acc = 0.0
+    best_weights = None
     train_losses: List[float] = []
-    val_losses:   List[float] = []
+    val_losses: List[float] = []
 
     print("\n" + "="*55)
     print("  Exp 1: SimpleCNN from scratch | " + str(training_cfg.epoch) + " epochs")
     print("="*55)
 
     for epoch in range(1, training_cfg.epoch + 1):
-        tr_loss, tr_acc   = train_standard(model, train_loader, optimizer, criterion, device)
-        val_loss, val_acc = validate(model, val_loader, device)
+        tr_loss, tr_acc   = train_one_epoch(model, train_loader, optimizer, criterion, device)
+        val_loss, val_acc = validate(model, val_loader, criterion, device)
+        scheduler.step()
 
         train_losses.append(tr_loss)
         val_losses.append(val_loss)
@@ -446,15 +233,14 @@ def run_exp1(
             torch.save(best_weights, os.path.join(save_dir, "model.pth"))
             print("    Checkpoint saved (val_acc=" + str(round(best_acc, 4)) + ")")
 
-
-        save_results(
-            params     = {**asdict(kd_cfg), **asdict(training_cfg)},
-            tloss_list = train_losses,
-            vloss_list = val_losses,
-            save_dir   = save_dir,
-            name       = "kd_simplecnn_scratch",
-        )
-        print("\n  Best val accuracy: " + str(round(best_acc, 4)))
+    print("\n  Best val accuracy: " + str(round(best_acc, 4)))
+    save_results(
+        params = {**asdict(kd_cfg), **asdict(training_cfg)},
+        tloss_list = train_losses,
+        vloss_list = val_losses,
+        save_dir = save_dir,
+        name = "kd_simplecnn_scratch",
+    )
 
 
 def run_exp2(
@@ -498,22 +284,20 @@ def run_exp2(
             lr=training_cfg.learning_rate,
             weight_decay=training_cfg.weight_decay,
         )
-
         train_loader, val_loader = get_loaders(training_cfg)
 
-        best_acc               = 0.0
-        best_weights           = None
+        best_acc = 0.0
+        best_weights = None
         train_losses: List[float] = []
-        val_losses:   List[float] = []
+        val_losses: List[float] = []
 
         print("\n" + "="*55)
         print("  Exp 2: ResNet-18 " + label + " | " + str(training_cfg.epoch) + " epochs")
         print("="*55)
 
         for epoch in range(1, training_cfg.epoch + 1):
-            tr_loss, tr_acc   = train_standard(model, train_loader, optimizer, criterion, device)
-            val_loss, val_acc = validate(model, val_loader, device)
-
+            tr_loss, tr_acc   = train_one_epoch(model, train_loader, optimizer, criterion, device)
+            val_loss, val_acc = validate(model, val_loader, criterion, device)
 
             train_losses.append(tr_loss)
             val_losses.append(val_loss)
@@ -533,15 +317,14 @@ def run_exp2(
                 torch.save(best_weights, ckpt_path)
                 print("    Checkpoint saved (val_acc=" + str(round(best_acc, 4)) + ")")
 
-            save_results(
-                params     = {**asdict(kd_cfg), **asdict(training_cfg)},
-                tloss_list = train_losses,
-                vloss_list = val_losses,
-                save_dir   = save_dir,
-                name       = "kd_resnet_" + suffix,
-            )
-            print("\n  Best val accuracy (" + label + "): " + str(round(best_acc, 4)))
-
+        print("\n  Best val accuracy (" + label + "): " + str(round(best_acc, 4)))
+        save_results(
+            params = {**asdict(kd_cfg), **asdict(training_cfg)},
+            tloss_list = train_losses,
+            vloss_list = val_losses,
+            save_dir = save_dir,
+            name = "kd_resnet_" + suffix,
+        )
 
     return path_no_ls, path_ls
 
@@ -582,8 +365,8 @@ def run_exp3(
     )
     train_loader, val_loader = get_loaders(training_cfg)
 
-    best_acc               = 0.0
-    best_weights           = None
+    best_acc = 0.0
+    best_weights = None
     train_losses: List[float] = []
     val_losses:   List[float] = []
 
@@ -599,11 +382,10 @@ def run_exp3(
     print("="*55)
 
     for epoch in range(1, training_cfg.epoch + 1):
-        tr_loss, tr_acc   = train_kd(
-            student, teacher, train_loader, optimizer,
-            kd_cfg, device, use_modified=False,
+        tr_loss, tr_acc   = train_one_epoch(
+            student, train_loader, optimizer, hinton_kd_loss, device, teacher=teacher, kd_cfg= kd_cfg
         )
-        val_loss, val_acc = validate(student, val_loader, device)
+        val_loss, val_acc = validate(student, val_loader, hinton_kd_loss, device)
 
         train_losses.append(tr_loss)
         val_losses.append(val_loss)
@@ -622,22 +404,17 @@ def run_exp3(
             torch.save(best_weights, os.path.join(save_dir, "model.pth"))
             print("    Checkpoint saved (val_acc=" + str(round(best_acc, 4)) + ")")
 
-        teacher_flops = report_flops(teacher, (3, 32, 32), "ResNet-18 (teacher)")
-        student_flops = report_flops(student, (3, 32, 32), "SimpleCNN (student)")
-
-        save_results(
-            params     = {**asdict(kd_cfg),
-                          **asdict(training_cfg),
-                          "teacher_flops": teacher_flops,
-                          "student_flops": student_flops
-                          },
-            tloss_list = train_losses,
-            vloss_list = val_losses,
-            save_dir   = save_dir,
-            name       = "kd_simplecnn_kd",
-        )
     print("\n  Best val accuracy: " + str(round(best_acc, 4)))
+    report_flops(teacher, (3, 32, 32), "ResNet-18 (teacher)")
+    report_flops(student, (3, 32, 32), "SimpleCNN (student)")
 
+    save_results(
+        params = {**asdict(kd_cfg), **asdict(training_cfg)},
+        tloss_list = train_losses,
+        vloss_list = val_losses,
+        save_dir = save_dir,
+        name = "kd_simplecnn_kd",
+    )
 
 
 def run_exp4(
@@ -671,7 +448,7 @@ def run_exp4(
     teacher.eval()
     print("  Teacher loaded: " + teacher_path)
 
-    student   = MobileNetV2(num_classes=10).to(device)
+    student = MobileNetV2(num_classes=10).to(device)
     optimizer = torch.optim.Adam(
         student.parameters(),
         lr=training_cfg.learning_rate,
@@ -680,8 +457,8 @@ def run_exp4(
 
     train_loader, val_loader = get_loaders(training_cfg)
 
-    best_acc               = 0.0
-    best_weights           = None
+    best_acc = 0.0
+    best_weights = None
     train_losses: List[float] = []
     val_losses:   List[float] = []
 
@@ -697,11 +474,10 @@ def run_exp4(
     print("="*55)
 
     for epoch in range(1, training_cfg.epoch + 1):
-        tr_loss, tr_acc   = train_kd(
-            student, teacher, train_loader, optimizer,
-            kd_cfg, device, use_modified=True,
+        tr_loss, tr_acc = train_one_epoch(
+            student, train_loader, optimizer, modified_kd_loss, device, teacher=teacher, kd_cfg=kd_cfg
         )
-        val_loss, val_acc = validate(student, val_loader, device)
+        val_loss, val_acc = validate(student, val_loader, modified_kd_loss, device)
 
         train_losses.append(tr_loss)
         val_losses.append(val_loss)
@@ -715,26 +491,22 @@ def run_exp4(
         )
 
         if val_acc > best_acc:
-            best_acc     = val_acc
+            best_acc = val_acc
             best_weights = deepcopy(student.state_dict())
             torch.save(best_weights, os.path.join(save_dir, "model.pth"))
             print("    Checkpoint saved (val_acc=" + str(round(best_acc, 4)) + ")")
 
-        teacher_flops = report_flops(teacher, (3, 32, 32), "ResNet-18 (teacher)")
-        student_flops = report_flops(student, (3, 32, 32), "MobileNetV2 (student)")
-
-        save_results(
-            params     = {**asdict(kd_cfg), 
-                          **asdict(training_cfg),
-                          "teacher_flops": teacher_flops,
-                          "student_flops": student_flops
-                          },
-            tloss_list = train_losses,
-            vloss_list = val_losses,
-            save_dir   = save_dir,
-            name       = "kd_mobilenet",
-        )
     print("\n  Best val accuracy: " + str(round(best_acc, 4)))
+    report_flops(teacher, (3, 32, 32), "ResNet-18   (teacher)")
+    report_flops(student, (3, 32, 32), "MobileNetV2 (student)")
+
+    save_results(
+        params = {**asdict(kd_cfg), **asdict(training_cfg)},
+        tloss_list = train_losses,
+        vloss_list = val_losses,
+        save_dir = save_dir,
+        name = "kd_mobilenet",
+    )
 
 
 # ==============================================================================
@@ -745,18 +517,12 @@ def run_distillation(params: Namespace) -> None:
     """
     Run all requested knowledge distillation experiments.
 
-    Reads --kd_experiment from params. If not set, runs all four in order.
-    Experiments 3 and 4 require a teacher checkpoint. If running all four,
-    the best model from Exp 2 is selected automatically. If running 3 or 4
-    standalone, the teacher path must be provided via --kd_teacher_path
-    or the checkpoint from Exp 2 must already exist at the default path.
-
     Args:
         params: Parsed Namespace object from get_params().
     """
-    kd_cfg       = get_kd_config(params)
+    kd_cfg = get_kd_config(params)
     training_cfg = get_training_configs(params)
-    device       = get_device()
+    device = get_device()
 
     print("Task   : Knowledge Distillation (CIFAR-10)")
     print("Device : " + str(device))
@@ -777,8 +543,8 @@ def run_distillation(params: Namespace) -> None:
         m2.load_state_dict(torch.load(path_ls, map_location=device))
 
         _, val_loader = get_loaders(training_cfg)
-        _, acc_no_ls  = validate(m1, val_loader, device)
-        _, acc_ls     = validate(m2, val_loader, device)
+        _, acc_no_ls = validate(m1, val_loader, nn.CrossEntropyLoss(), device)
+        _, acc_ls = validate(m2, val_loader, LabelSmoothingLoss(10, kd_cfg.smoothing),  device)
 
         if acc_ls > acc_no_ls:
             teacher_path = path_ls

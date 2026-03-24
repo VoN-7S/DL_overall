@@ -1,22 +1,3 @@
-"""
-main.py
--------
-Unified entry point for all experiments in this repository.
-
-Dispatch table
---------------
-    --task mnist        -- MNIST MLP classification (HW1a)
-    --task transfer     -- CIFAR-10 transfer learning (HW1b Part A)
-    --task distillation -- CIFAR-10 knowledge distillation (HW1b Part B)
-
-Usage
------
-    python main.py --task mnist --epoch 25 --mlp_hidden_layers 256 128
-    python main.py --task transfer --tl_option both --epoch 30
-    python main.py --task distillation --epoch 30
-    python main.py --task distillation --kd_experiment 3 --kd_teacher_path results/kd/kd_resnet/model_no_ls.pth
-"""
-
 import ssl
 import sys
 
@@ -34,11 +15,7 @@ def main() -> None:
     """
     params = get_params()
 
-    if params.task == "mnist":
-        from mnist import run_mnist
-        run_mnist(params)
-
-    elif params.task == "transfer":
+    if params.task == "transfer":
         from transfer_learning import run_transfer
         run_transfer(params)
 
