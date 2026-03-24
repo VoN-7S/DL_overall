@@ -215,9 +215,9 @@ def run_one_option(
         print(
             "  [" + str(epoch).zfill(2) + "/" + str(training_cfg.epoch).zfill(2) + "]" +
             "  train_loss=" + str(round(tr_loss, 4)) +
-            "  train_acc="  + str(round(tr_acc, 4)) +
-            "  val_loss="   + str(round(val_loss, 4)) +
-            "  val_acc="    + str(round(val_acc, 4))
+            "  train_acc=" + str(round(tr_acc, 4)) +
+            "  val_loss=" + str(round(val_loss, 4)) +
+            "  val_acc=" + str(round(val_acc, 4))
         )
 
         if val_acc > best_acc:

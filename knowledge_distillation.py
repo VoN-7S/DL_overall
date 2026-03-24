@@ -167,9 +167,9 @@ def run_exp1(
         print(
             "  [" + str(epoch).zfill(2) + "/" + str(training_cfg.epoch) + "]" +
             "  train_loss=" + str(round(tr_loss, 4)) +
-            "  train_acc="  + str(round(tr_acc, 4)) +
-            "  val_loss="   + str(round(val_loss, 4)) +
-            "  val_acc="    + str(round(val_acc, 4))
+            "  train_acc=" + str(round(tr_acc, 4)) +
+            "  val_loss=" + str(round(val_loss, 4)) +
+            "  val_acc=" + str(round(val_acc, 4))
         )
 
         if val_acc > best_acc:
@@ -250,9 +250,9 @@ def run_exp2(
             print(
                 "  [" + str(epoch).zfill(2) + "/" + str(training_cfg.epoch) + "]" +
                 "  train_loss=" + str(round(tr_loss, 4)) +
-                "  train_acc="  + str(round(tr_acc, 4)) +
-                "  val_loss="   + str(round(val_loss, 4)) +
-                "  val_acc="    + str(round(val_acc, 4))
+                "  train_acc=" + str(round(tr_acc, 4)) +
+                "  val_loss=" + str(round(val_loss, 4)) +
+                "  val_acc=" + str(round(val_acc, 4))
             )
 
             if val_acc > best_acc:
@@ -338,9 +338,9 @@ def run_exp3(
         print(
             "  [" + str(epoch).zfill(2) + "/" + str(training_cfg.epoch) + "]" +
             "  train_loss=" + str(round(tr_loss, 4)) +
-            "  train_acc="  + str(round(tr_acc, 4)) +
-            "  val_loss="   + str(round(val_loss, 4)) +
-            "  val_acc="    + str(round(val_acc, 4))
+            "  train_acc=" + str(round(tr_acc, 4)) +
+            "  val_loss=" + str(round(val_loss, 4)) +
+            "  val_acc=" + str(round(val_acc, 4))
         )
 
         if val_acc > best_acc:
@@ -430,9 +430,9 @@ def run_exp4(
         print(
             "  [" + str(epoch).zfill(2) + "/" + str(training_cfg.epoch) + "]" +
             "  train_loss=" + str(round(tr_loss, 4)) +
-            "  train_acc="  + str(round(tr_acc, 4)) +
-            "  val_loss="   + str(round(val_loss, 4)) +
-            "  val_acc="    + str(round(val_acc, 4))
+            "  train_acc=" + str(round(tr_acc, 4)) +
+            "  val_loss=" + str(round(val_loss, 4)) +
+            "  val_acc=" + str(round(val_acc, 4))
         )
 
         if val_acc > best_acc:
