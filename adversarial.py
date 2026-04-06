@@ -44,6 +44,8 @@ from sklearn.manifold import TSNE
 from models.ResNet import ResNet, BasicBlock
 from auxillary import get_device
 
+from parameters import AdversarialConfig
+
 
 # ==============================================================================
 #  Constants
@@ -383,7 +385,7 @@ def extract_features(
     model.eval()
 
     # Temporarily remove the FC head to get 512-d embeddings
-    original_fc = model.linear
+    original_fc = model.linear if hasattr(model, "linear") else model.fc
     model.linear = nn.Identity()
 
     for imgs, lbls in loader:
@@ -488,18 +490,6 @@ def _load_resnet_from_scratch(ckpt_path: str, device: torch.device) -> ResNet:
 # ==============================================================================
 #  Task 3 runner
 # ==============================================================================
-
-@dataclass
-class AdversarialConfig:
-    """Configuration for HW2 adversarial experiments."""
-    vanilla_ckpt:  str   = "./results/transfer/transfer_layerchange/model.pth"
-    augmix_ckpt:   str   = "./results/hw2/robustness_augmix/model.pth"
-    batch_size:    int   = 128
-    num_workers:   int   = 2
-    linf_eps:      float = 4.0 / 255.0
-    l2_eps:        float = 0.25
-    pgd_steps:     int   = 20
-    tsne_samples:  int   = 1000
 
 
 def run_task3(cfg: AdversarialConfig, device: torch.device) -> None:

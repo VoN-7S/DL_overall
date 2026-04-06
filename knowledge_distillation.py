@@ -18,7 +18,7 @@ from train import train_one_epoch
 from models.SimpleCNN import SimpleCNN
 from models.ResNet import ResNet, BasicBlock
 from models.mobilenet import MobileNetV2
-from parameters import KDConfig, TrainingConfig, get_kd_config, get_training_configs, HW2KDConfig
+from parameters import KDConfig, TrainingConfig, get_kd_config, get_training_configs
 from auxillary import set_seed, get_device, save_results
 from loss_functions import *
 from adversarial import pgd_attack
@@ -113,61 +113,6 @@ def report_flops(model: nn.Module, input_shape: Tuple, name: str) -> None:
     print("\n  -- " + name + " --")
     print("     MACs   : " + str(macs))
     print("     Params : " + str(params))
-
-# ==============================================================================
-#  Model loading helpers
-# ==============================================================================
- 
-def _load_augmix_teacher(ckpt_path: str, device: torch.device) -> ResNet:
-    """
-    Load AugMix-trained ResNet-18 (built with repo's ResNet class).
- 
-    Args:
-        ckpt_path: Path to the .pth checkpoint from Task 2.
-        device:    Compute device.
- 
-    Returns:
-        Loaded ResNet-18 with gradients frozen.
- 
-    Raises:
-        FileNotFoundError: If ckpt_path does not exist.
-    """
-    if not os.path.exists(ckpt_path):
-        raise FileNotFoundError(
-            f"AugMix teacher checkpoint not found: {ckpt_path}\n"
-            "Run Task 2 first: python main.py --task robustness --hw2_task task2"
-        )
-    model = ResNet(BasicBlock, [2, 2, 2, 2], num_classes=10)
-    model.load_state_dict(torch.load(ckpt_path, map_location=device))
-    for p in model.parameters():
-        p.requires_grad = False
-    model.eval()
-    model.to(device)
-    return model
- 
- 
-def _load_vanilla_teacher(ckpt_path: str, device: torch.device) -> nn.Module:
-    """
-    Load vanilla ResNet-18 (HW1b transfer learning option 2 checkpoint).
- 
-    Uses torchvision's ResNet-18 with the modified first conv layer.
-    """
-    import torchvision.models as tvm
-    if not os.path.exists(ckpt_path):
-        raise FileNotFoundError(
-            f"Vanilla teacher checkpoint not found: {ckpt_path}\n"
-            "Run HW1b first: python main.py --task transfer --tl_option 2"
-        )
-    model = tvm.resnet18(weights=None)
-    model.conv1   = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-    model.maxpool = nn.Identity()
-    model.fc      = nn.Linear(model.fc.in_features, 10)
-    model.load_state_dict(torch.load(ckpt_path, map_location=device))
-    for p in model.parameters():
-        p.requires_grad = False
-    model.eval()
-    model.to(device)
-    return model
 
 
 # ==============================================================================
@@ -390,7 +335,7 @@ def run_exp3(
         tr_loss, tr_acc = train_one_epoch(
             student, train_loader, optimizer, hinton_kd_loss, device, teacher=teacher, kd_cfg= kd_cfg
         )
-        val_loss, val_acc = validate(student, val_loader, hinton_kd_loss, device)
+        val_loss, val_acc = validate(student, val_loader, hinton_kd_loss, device, teacher=teacher, kd_cfg = kd_cfg)
 
         train_losses.append(tr_loss)
         val_losses.append(val_loss)
@@ -482,7 +427,7 @@ def run_exp4(
         tr_loss, tr_acc = train_one_epoch(
             student, train_loader, optimizer, modified_kd_loss, device, teacher=teacher, kd_cfg=kd_cfg
         )
-        val_loss, val_acc = validate(student, val_loader, modified_kd_loss, device)
+        val_loss, val_acc = validate(student, val_loader, modified_kd_loss, device, teacher=teacher, kd_cfg=kd_cfg)
 
         train_losses.append(tr_loss)
         val_losses.append(val_loss)
