@@ -50,10 +50,9 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, TensorDataset
 
 from models.ResNet import ResNet, BasicBlock
-from auxillary import set_seed, get_device, save_results
-from AugMix import AugMixTransform, augmix_loss
+from auxillary import set_seed, get_device, save_results, AugMixTransform, augmix_loss
 from test import validate
-from parameters import RobustnessConfig
+from parameters import RobustnessConfig, TrainingConfig, get_training_configs
 
 # ==============================================================================
 #  Constants
@@ -72,7 +71,6 @@ _CORRUPTIONS = [
 ]
 
 _NUM_CLASSES = 10
-_INPUT_SHAPE = (3, 32, 32)
 
 
 # ==============================================================================
@@ -305,7 +303,7 @@ def _train_one_epoch_augmix(
 #  Task runners
 # ==============================================================================
 
-def run_task1(cfg: "RobustnessConfig", device: torch.device) -> Dict[str, Dict[int, float]]:
+def run_task1(train_cfg: TrainingConfig, augmix_cfg: RobustnessConfig, device: torch.device) -> Dict[str, Dict[int, float]]:
     """
     Task 1: Evaluate vanilla HW1b model on clean CIFAR-10 and CIFAR-10-C.
 
@@ -328,7 +326,7 @@ def run_task1(cfg: "RobustnessConfig", device: torch.device) -> Dict[str, Dict[i
     model.conv1  = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
     model.maxpool = nn.Identity()
     model.fc      = nn.Linear(model.fc.in_features, _NUM_CLASSES)
-    ckpt = cfg.vanilla_ckpt
+    ckpt = train_cfg.vanilla_ckpt
     if not os.path.exists(ckpt):
         raise FileNotFoundError(
             f"Vanilla checkpoint not found: {ckpt}\n"
@@ -338,7 +336,7 @@ def run_task1(cfg: "RobustnessConfig", device: torch.device) -> Dict[str, Dict[i
     model.to(device)
     print(f"  Loaded vanilla checkpoint: {ckpt}")
 
-    clean_loader = _get_clean_loader(cfg.batch_size, cfg.num_workers)
+    clean_loader = _get_clean_loader(train_cfg.batch_size, train_cfg.num_workers)
     _, clean_acc = validate(model, clean_loader, nn.CrossEntropyLoss(), device)
     print(f"\n  Clean test accuracy (vanilla): {clean_acc:.4f}")
 
@@ -351,7 +349,7 @@ def run_task1(cfg: "RobustnessConfig", device: torch.device) -> Dict[str, Dict[i
         return {}
 
     print("\n  Evaluating on CIFAR-10-C...")
-    results = evaluate_cifar10c(model, cfg.batch_size, cfg.num_workers, device)
+    results = evaluate_cifar10c(model, train_cfg.batch_size, train_cfg.num_workers, device)
     mce = mean_corruption_error(results, clean_acc)
     print(f"\n  mCE (vanilla): {mce:.4f}   clean_acc: {clean_acc:.4f}")
 
@@ -369,7 +367,8 @@ def run_task1(cfg: "RobustnessConfig", device: torch.device) -> Dict[str, Dict[i
 
 
 def run_task2(
-    cfg: "RobustnessConfig",
+    training_cfg: TrainingConfig,
+    robustness_cfg: RobustnessConfig,
     device: torch.device,
 ) -> Tuple[nn.Module, Dict[str, Dict[int, float]]]:
     """
@@ -389,38 +388,36 @@ def run_task2(
     """
     save_dir = "./results/hw2/robustness_augmix"
     os.makedirs(save_dir, exist_ok=True)
-    set_seed(cfg.seed)
+    set_seed(training_cfg.seed)
 
     model = ResNet(BasicBlock, [2, 2, 2, 2], num_classes=_NUM_CLASSES).to(device)
     optimizer = torch.optim.SGD(
-        model.parameters(), lr=cfg.learning_rate,
-        momentum=0.9, weight_decay=cfg.weight_decay,
+        model.parameters(), lr=training_cfg.learning_rate,
+        momentum=0.9, weight_decay=training_cfg.weight_decay,
     )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.epochs)
 
-    train_loader = _get_augmix_train_loader(cfg.batch_size, cfg.num_workers)
-    clean_loader = _get_clean_loader(cfg.batch_size, cfg.num_workers)
+    train_loader = _get_augmix_train_loader(training_cfg.batch_size, training_cfg.num_workers)
+    clean_loader = _get_clean_loader(training_cfg.batch_size, training_cfg.num_workers)
 
     best_acc = 0.0
     train_losses: List[float] = []
     val_losses:   List[float] = []
 
     print("\n" + "=" * 55)
-    print(f"  Task 2: AugMix training | {cfg.epochs} epochs")
+    print(f"  Task 2: AugMix training | {training_cfg.epochs} epochs")
     print("=" * 55)
 
-    for epoch in range(1, cfg.epochs + 1):
+    for epoch in range(1, training_cfg.epochs + 1):
         tr_loss, tr_acc = _train_one_epoch_augmix(
-            model, train_loader, optimizer, device, lam=cfg.augmix_lambda
+            model, train_loader, optimizer, device, lam=robustness_cfg.augmix_lambda
         )
         val_loss, val_acc = validate(model, clean_loader, nn.CrossEntropyLoss(), device)
-        scheduler.step()
 
         train_losses.append(tr_loss)
         val_losses.append(val_loss)
 
         print(
-            f"  [{epoch:02d}/{cfg.epochs}]"
+            f"  [{epoch:02d}/{training_cfg.epochs}]"
             f"  tr_loss={tr_loss:.4f}  tr_acc={tr_acc:.4f}"
             f"  val_loss={val_loss:.4f}  val_acc={val_acc:.4f}"
         )
@@ -450,7 +447,7 @@ def run_task2(
         return model, {}
 
     print("\n  Evaluating on CIFAR-10-C...")
-    results = evaluate_cifar10c(model, cfg.batch_size, cfg.num_workers, device)
+    results = evaluate_cifar10c(model, training_cfg.batch_size, training_cfg.num_workers, device)
     mce = mean_corruption_error(results, clean_acc)
     print(f"\n  mCE (AugMix): {mce:.4f}   clean_acc: {clean_acc:.4f}")
 
@@ -479,7 +476,8 @@ def run_robustness(params: Namespace) -> None:
         params: Parsed argparse Namespace (from get_params in parameters.py).
     """
     from parameters import get_robustness_config
-    cfg    = get_robustness_config(params)
+    augmix_cfg    = get_robustness_config(params)
+    train_cfg = get_training_configs(params)
     device = get_device()
 
     print("Task   : HW2 Robustness (CIFAR-10 / CIFAR-10-C)")
@@ -489,11 +487,11 @@ def run_robustness(params: Namespace) -> None:
     results_augmix:  Dict[str, Dict[int, float]] = {}
 
     if params.hw2_task in ("task1", "both"):
-        results_vanilla = run_task1(cfg, device)
+        results_vanilla = run_task1(train_cfg, augmix_cfg, device)
 
     augmix_model: Optional[nn.Module] = None
     if params.hw2_task in ("task2", "both"):
-        augmix_model, results_augmix = run_task2(cfg, device)
+        augmix_model, results_augmix = run_task2(train_cfg, augmix_cfg, device)
         # Save model reference for downstream use (Tasks 4/5)
         if augmix_model is not None:
             print("  AugMix model available at ./results/hw2/robustness_augmix/model.pth")

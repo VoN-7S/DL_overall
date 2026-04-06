@@ -1,6 +1,6 @@
 from argparse import ArgumentParser, Namespace
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List
 # ══════════════════════════════════════════════════════════════════════════════
 #  Training
 # ══════════════════════════════════════════════════════════════════════════════
@@ -84,12 +84,7 @@ class RobustnessConfig:
         Weight λ on the Jensen-Shannon consistency loss (default 12 per paper).
     """
     vanilla_ckpt:  str   = "./results/transfer/transfer_layerchange/model.pth"
-    batch_size:    int   = 128
-    num_workers:   int   = 2
     seed:          int   = 7
-    epochs:        int   = 30
-    learning_rate: float = 0.05
-    weight_decay:  float = 5e-4
     augmix_lambda: float = 12.0
  
  
@@ -119,52 +114,10 @@ class AdversarialConfig:
     """
     vanilla_ckpt:  str   = "./results/transfer/transfer_layerchange/model.pth"
     augmix_ckpt:   str   = "./results/hw2/robustness_augmix/model.pth"
-    batch_size:    int   = 128
-    num_workers:   int   = 2
     linf_eps:      float = 4.0 / 255.0
     l2_eps:        float = 0.25
     pgd_steps:     int   = 20
     tsne_samples:  int   = 1000
- 
- 
-@dataclass
-class HW2KDConfig:
-    """
-    Configuration for HW2 Tasks 4 & 5 — AugMix teacher KD and transferability.
- 
-    Attributes
-    ----------
-    vanilla_ckpt:
-        Path to the HW1b fine-tuned teacher checkpoint.
-    augmix_ckpt:
-        Path to the AugMix-trained teacher checkpoint from Task 2.
-    batch_size:
-        Mini-batch size.
-    num_workers:
-        DataLoader worker processes.
-    seed:
-        Global random seed.
-    epochs:
-        Number of student training epochs.
-    learning_rate:
-        Adam learning rate for student training.
-    weight_decay:
-        L2 regularization coefficient.
-    temperature:
-        KD softening temperature T.
-    alpha:
-        Weight on the soft-target KD loss.
-    """
-    vanilla_ckpt:  str   = "./results/transfer/transfer_layerchange/model.pth"
-    augmix_ckpt:   str   = "./results/hw2/robustness_augmix/model.pth"
-    batch_size:    int   = 128
-    num_workers:   int   = 2
-    seed:          int   = 7
-    epochs:        int   = 30
-    learning_rate: float = 1e-3
-    weight_decay:  float = 1e-4
-    temperature:   float = 4.0
-    alpha:         float = 0.7
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  Argument parser
@@ -187,7 +140,7 @@ def get_params() -> Namespace:
     # ── Task selector ──────────────────────────────────────────────────────────
     parser.add_argument(
         "--task",
-        choices=["transfer", "distillation", "robustness", "adversarial", "cutmix_distillation"],
+        choices=["transfer", "distillation", "robustness", "adversarial", "augmix_distillation"],
         default="transfer",
         help="Which experiment to run.",
     )
@@ -223,16 +176,7 @@ def get_params() -> Namespace:
         choices=["task1", "task2", "task3", "task4", "task5", "both"], 
         default="both", 
         help=("Which HW2 sub-task to run. "))
-    parser.add_argument(
-        "--augmix_epochs",   
-        default=30,   
-        type=int,
-        help="Training epochs for AugMix model (Task 2).")
-    parser.add_argument(
-        "--augmix_lr",       
-        default=0.05, 
-        type=float,
-        help="Learning rate for AugMix training (Task 2).")
+
     parser.add_argument(
         "--augmix_lambda",   
         default=12.0, 
@@ -258,16 +202,6 @@ def get_params() -> Namespace:
         default=1000, 
         type=int,
         help="Number of samples for t-SNE visualization.")
-    parser.add_argument(
-        "--hw2_kd_epochs",   
-        default=30,   
-        type=int,
-        help="Student training epochs for HW2 KD experiments.")
-    parser.add_argument(
-        "--hw2_kd_lr",       
-        default=1e-3, 
-        type=float,
-        help="Adam learning rate for HW2 student training.")
     parser.add_argument(
         "--vanilla_ckpt", 
         default="./results/transfer/transfer_layerchange/model.pth", 
@@ -344,12 +278,6 @@ def get_robustness_config(p: Namespace) -> RobustnessConfig:
     """
     return RobustnessConfig(
         vanilla_ckpt  = getattr(p, "vanilla_ckpt",  "./results/transfer/transfer_layerchange/model.pth"),
-        batch_size    = p.batch_size,
-        num_workers   = p.num_workers,
-        seed          = p.seed,
-        epochs        = getattr(p, "augmix_epochs", 30),
-        learning_rate = getattr(p, "augmix_lr",     0.05),
-        weight_decay  = p.weight_decay,
         augmix_lambda = getattr(p, "augmix_lambda", 12.0),
     )
  
@@ -365,32 +293,9 @@ def get_adversarial_config(p: Namespace) -> AdversarialConfig:
     return AdversarialConfig(
         vanilla_ckpt  = getattr(p, "vanilla_ckpt",  "./results/transfer/transfer_layerchange/model.pth"),
         augmix_ckpt   = getattr(p, "augmix_ckpt",   "./results/hw2/robustness_augmix/model.pth"),
-        batch_size    = p.batch_size,
-        num_workers   = p.num_workers,
         linf_eps      = getattr(p, "linf_eps",       4.0 / 255.0),
         l2_eps        = getattr(p, "l2_eps",         0.25),
         pgd_steps     = getattr(p, "pgd_steps",      20),
         tsne_samples  = getattr(p, "tsne_samples",   1000),
     )
  
- 
-def get_hw2_kd_config(p: Namespace) -> HW2KDConfig:
-    """
-    Build a HW2KDConfig from parsed arguments.
- 
-    Returns
-    -------
-    HW2KDConfig
-    """
-    return HW2KDConfig(
-        vanilla_ckpt  = getattr(p, "vanilla_ckpt",  "./results/transfer/transfer_layerchange/model.pth"),
-        augmix_ckpt   = getattr(p, "augmix_ckpt",   "./results/hw2/robustness_augmix/model.pth"),
-        batch_size    = p.batch_size,
-        num_workers   = p.num_workers,
-        seed          = p.seed,
-        epochs        = getattr(p, "hw2_kd_epochs", 30),
-        learning_rate = getattr(p, "hw2_kd_lr",     1e-3),
-        weight_decay  = p.weight_decay,
-        temperature   = p.kd_temperature,
-        alpha         = p.kd_alpha,
-    )

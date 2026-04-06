@@ -147,9 +147,6 @@ def run_exp1(
         lr=training_cfg.learning_rate,
         weight_decay=training_cfg.weight_decay,
     )
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer, T_max=training_cfg.epoch
-    )
     train_loader, val_loader = get_loaders(training_cfg)
 
     best_acc = 0.0
@@ -164,7 +161,6 @@ def run_exp1(
     for epoch in range(1, training_cfg.epoch + 1):
         tr_loss, tr_acc   = train_one_epoch(model, train_loader, optimizer, criterion, device)
         val_loss, val_acc = validate(model, val_loader, criterion, device)
-        scheduler.step()
 
         train_losses.append(tr_loss)
         val_losses.append(val_loss)
@@ -528,7 +524,7 @@ def _eval_on_dataset(
     return correct / n
  
  
-def run_task5(kd_cfg: KDConfig, training_cfg: TrainingConfig, device: torch.device) -> None:
+def run_task5(training_cfg: TrainingConfig, device: torch.device) -> None:
     """
     Task 5: Adversarial transferability — teacher-crafted samples tested on student.
  

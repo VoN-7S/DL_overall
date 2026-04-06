@@ -35,7 +35,6 @@ def validate(
             out  = model(imgs)
             with torch.no_grad():
                 t_logits = teacher(imgs)
-            criterion()
             loss = criterion(out, t_logits, labels, kd_cfg.temperature, kd_cfg.alpha,)
             total_loss += loss.item() * imgs.size(0)
             correct    += out.argmax(1).eq(labels).sum().item()
@@ -47,7 +46,6 @@ def validate(
             imgs, labels = imgs.to(device), labels.to(device)
             out  = model(imgs)
             loss = criterion(out, labels)
-            loss.backward()
             total_loss += loss.item() * imgs.size(0)
             correct    += out.argmax(1).eq(labels).sum().item()
             n          += imgs.size(0)

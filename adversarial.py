@@ -44,7 +44,7 @@ from sklearn.manifold import TSNE
 from models.ResNet import ResNet, BasicBlock
 from auxillary import get_device
 
-from parameters import AdversarialConfig
+from parameters import AdversarialConfig, TrainingConfig
 
 
 # ==============================================================================
@@ -492,7 +492,7 @@ def _load_resnet_from_scratch(ckpt_path: str, device: torch.device) -> ResNet:
 # ==============================================================================
 
 
-def run_task3(cfg: AdversarialConfig, device: torch.device) -> None:
+def run_task3(training_cfg: TrainingConfig, adv_cfg: AdversarialConfig, device: torch.device) -> None:
     """
     Task 3: PGD adversarial evaluation, Grad-CAM, and t-SNE.
 
@@ -514,24 +514,24 @@ def run_task3(cfg: AdversarialConfig, device: torch.device) -> None:
         "./data", train=False, download=True, transform=tf
     )
     test_loader = DataLoader(
-        test_ds, batch_size=cfg.batch_size, shuffle=False,
-        num_workers=cfg.num_workers, pin_memory=True,
+        test_ds, batch_size=training_cfg.batch_size, shuffle=False,
+        num_workers=training_cfg.num_workers, pin_memory=True,
     )
 
     # ---------- Load models ----------
-    if not os.path.exists(cfg.vanilla_ckpt):
-        raise FileNotFoundError(f"Vanilla checkpoint not found: {cfg.vanilla_ckpt}")
-    vanilla_model = _load_resnet(cfg.vanilla_ckpt, device)
+    if not os.path.exists(adv_cfg.vanilla_ckpt):
+        raise FileNotFoundError(f"Vanilla checkpoint not found: {adv_cfg.vanilla_ckpt}")
+    vanilla_model = _load_resnet(adv_cfg.vanilla_ckpt, device)
     vanilla_model.eval()
-    print(f"  Loaded vanilla model: {cfg.vanilla_ckpt}")
+    print(f"  Loaded vanilla model: {adv_cfg.vanilla_ckpt}")
 
     augmix_model: Optional[nn.Module] = None
-    if os.path.exists(cfg.augmix_ckpt):
-        augmix_model = _load_resnet_from_scratch(cfg.augmix_ckpt, device)
+    if os.path.exists(adv_cfg.augmix_ckpt):
+        augmix_model = _load_resnet_from_scratch(adv_cfg.augmix_ckpt, device)
         augmix_model.eval()
-        print(f"  Loaded AugMix model: {cfg.augmix_ckpt}")
+        print(f"  Loaded AugMix model: {adv_cfg.augmix_ckpt}")
     else:
-        print(f"  [WARN] AugMix checkpoint not found: {cfg.augmix_ckpt}. Skipping AugMix eval.")
+        print(f"  [WARN] AugMix checkpoint not found: {adv_cfg.augmix_ckpt}. Skipping AugMix eval.")
 
     results: Dict[str, Dict[str, float]] = {}
 
@@ -540,11 +540,11 @@ def run_task3(cfg: AdversarialConfig, device: torch.device) -> None:
             continue
         results[model_name] = {}
 
-        for norm, eps in [("linf", cfg.linf_eps), ("l2", cfg.l2_eps)]:
+        for norm, eps in [("linf", adv_cfg.linf_eps), ("l2", adv_cfg.l2_eps)]:
             alpha = eps / 4.0
             print(f"\n  PGD20 {norm.upper()} ε={eps:.4f} — {model_name}")
             rob_acc = evaluate_pgd(model, test_loader, eps, alpha,
-                                   cfg.pgd_steps, norm, device)
+                                   adv_cfg.pgd_steps, norm, device)
             results[model_name][norm] = round(rob_acc, 4)
             print(f"  Robust accuracy: {rob_acc:.4f}")
 
@@ -567,7 +567,7 @@ def run_task3(cfg: AdversarialConfig, device: torch.device) -> None:
     print("\n  Generating adversarial samples for Grad-CAM...")
     adv_linf = pgd_attack(
         vanilla_model, imgs_batch, lbls_batch,
-        cfg.linf_eps, cfg.linf_eps / 4, cfg.pgd_steps, "linf", device,
+        adv_cfg.linf_eps, adv_cfg.linf_eps / 4, adv_cfg.pgd_steps, "linf", device,
     )
 
     print("  Creating Grad-CAM plots...")
@@ -580,7 +580,7 @@ def run_task3(cfg: AdversarialConfig, device: torch.device) -> None:
     if augmix_model is not None:
         adv_linf_am = pgd_attack(
             augmix_model, imgs_batch, lbls_batch,
-            cfg.linf_eps, cfg.linf_eps / 4, cfg.pgd_steps, "linf", device,
+            adv_cfg.linf_eps, adv_cfg.linf_eps / 4, adv_cfg.pgd_steps, "linf", device,
         )
         visualize_gradcam(
             augmix_model,
@@ -601,29 +601,29 @@ def run_task3(cfg: AdversarialConfig, device: torch.device) -> None:
         batch_lbls = batch_lbls.to(device)
         batch_adv  = pgd_attack(
             vanilla_model, batch_imgs, batch_lbls,
-            cfg.linf_eps, cfg.linf_eps / 4, cfg.pgd_steps, "linf", device,
+            adv_cfg.linf_eps, adv_cfg.linf_eps / 4, adv_cfg.pgd_steps, "linf", device,
         )
         clean_imgs_list.append(batch_imgs.cpu())
         clean_lbls_list.append(batch_lbls.cpu())
         adv_imgs_list.append(batch_adv.cpu())
         adv_lbls_list.append(batch_lbls.cpu())
         collected += len(batch_lbls)
-        if collected >= cfg.tsne_samples:
+        if collected >= adv_cfg.tsne_samples:
             break
 
     from torch.utils.data import TensorDataset
-    clean_t = torch.cat(clean_imgs_list)[:cfg.tsne_samples]
-    clean_l = torch.cat(clean_lbls_list)[:cfg.tsne_samples]
-    adv_t   = torch.cat(adv_imgs_list)[:cfg.tsne_samples]
-    adv_l   = torch.cat(adv_lbls_list)[:cfg.tsne_samples]
+    clean_t = torch.cat(clean_imgs_list)[:adv_cfg.tsne_samples]
+    clean_l = torch.cat(clean_lbls_list)[:adv_cfg.tsne_samples]
+    adv_t   = torch.cat(adv_imgs_list)[:adv_cfg.tsne_samples]
+    adv_l   = torch.cat(adv_lbls_list)[:adv_cfg.tsne_samples]
 
     clean_ds  = TensorDataset(clean_t, clean_l)
     adv_ds    = TensorDataset(adv_t,   adv_l)
-    clean_ld  = DataLoader(clean_ds, batch_size=cfg.batch_size, shuffle=False)
-    adv_ld    = DataLoader(adv_ds,   batch_size=cfg.batch_size, shuffle=False)
+    clean_ld  = DataLoader(clean_ds, batch_size=training_cfg.batch_size, shuffle=False)
+    adv_ld    = DataLoader(adv_ds,   batch_size=training_cfg.batch_size, shuffle=False)
 
-    clean_feats, clean_lbl_np = extract_features(vanilla_model, clean_ld, device, cfg.tsne_samples)
-    adv_feats,   adv_lbl_np   = extract_features(vanilla_model, adv_ld,   device, cfg.tsne_samples)
+    clean_feats, clean_lbl_np = extract_features(vanilla_model, clean_ld, device, adv_cfg.tsne_samples)
+    adv_feats,   adv_lbl_np   = extract_features(vanilla_model, adv_ld,   device, adv_cfg.tsne_samples)
 
     plot_tsne(clean_feats, clean_lbl_np, adv_feats, adv_lbl_np,
               save_dir=os.path.join(save_dir, "tsne"))
