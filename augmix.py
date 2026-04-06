@@ -53,7 +53,7 @@ from models.ResNet import ResNet, BasicBlock
 from auxillary import set_seed, get_device, save_results
 from AugMix import AugMixTransform, augmix_loss
 from test import validate
-
+from parameters import RobustnessConfig
 
 # ==============================================================================
 #  Constants
@@ -469,18 +469,6 @@ def run_task2(
 # ==============================================================================
 #  Entry point
 # ==============================================================================
-
-@dataclass
-class RobustnessConfig:
-    """Configuration for HW2 robustness experiments."""
-    vanilla_ckpt:    str   = "./results/transfer/transfer_layerchange/model.pth"
-    batch_size:      int   = 128
-    num_workers:     int   = 2
-    seed:            int   = 7
-    epochs:          int   = 30
-    learning_rate:   float = 0.05
-    weight_decay:    float = 5e-4
-    augmix_lambda:   float = 12.0
 
 
 def run_robustness(params: Namespace) -> None:
