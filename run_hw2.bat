@@ -8,7 +8,7 @@ python main.py --task robustness --hw2_task task1 --batch_size 256 --num_workers
 echo ==============================================
 echo  HW2 Task 2: Train AugMix model + CIFAR-10-C eval
 echo ==============================================
-python main.py --task robustness --hw2_task task2 --batch_size 128 --num_workers 2 --augmix_epochs 30 --augmix_lr 0.05 --augmix_lambda 12.0 --seed 7
+python main.py --task robustness --hw2_task task2 --batch_size 128 --num_workers 2 --epochs 30 --learning_rate 0.05 --augmix_lambda 12.0 --seed 7
 
 echo ==============================================
 echo  HW2 Task 3: PGD attacks, Grad-CAM, t-SNE

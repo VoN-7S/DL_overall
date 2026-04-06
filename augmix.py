@@ -326,7 +326,7 @@ def run_task1(train_cfg: TrainingConfig, augmix_cfg: RobustnessConfig, device: t
     model.conv1  = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
     model.maxpool = nn.Identity()
     model.fc      = nn.Linear(model.fc.in_features, _NUM_CLASSES)
-    ckpt = train_cfg.vanilla_ckpt
+    ckpt = augmix_cfg.vanilla_ckpt
     if not os.path.exists(ckpt):
         raise FileNotFoundError(
             f"Vanilla checkpoint not found: {ckpt}\n"
@@ -404,10 +404,10 @@ def run_task2(
     val_losses:   List[float] = []
 
     print("\n" + "=" * 55)
-    print(f"  Task 2: AugMix training | {training_cfg.epochs} epochs")
+    print(f"  Task 2: AugMix training | {training_cfg.epoch} epochs")
     print("=" * 55)
 
-    for epoch in range(1, training_cfg.epochs + 1):
+    for epoch in range(1, training_cfg.epoch + 1):
         tr_loss, tr_acc = _train_one_epoch_augmix(
             model, train_loader, optimizer, device, lam=robustness_cfg.augmix_lambda
         )
@@ -417,7 +417,7 @@ def run_task2(
         val_losses.append(val_loss)
 
         print(
-            f"  [{epoch:02d}/{training_cfg.epochs}]"
+            f"  [{epoch:02d}/{training_cfg.epoch}]"
             f"  tr_loss={tr_loss:.4f}  tr_acc={tr_acc:.4f}"
             f"  val_loss={val_loss:.4f}  val_acc={val_acc:.4f}"
         )
