@@ -44,7 +44,7 @@ from sklearn.manifold import TSNE
 from models.ResNet import ResNet, BasicBlock
 from auxillary import get_device
 
-from parameters import AdversarialConfig, TrainingConfig
+from parameters import AdversarialConfig, TrainingConfig, get_training_configs
 
 
 # ==============================================================================
@@ -644,6 +644,7 @@ def run_adversarial(params: Namespace) -> None:
     """
     from parameters import get_adversarial_config
     cfg    = get_adversarial_config(params)
+    training_cfg = get_training_configs(params)
     device = get_device()
 
     print("Task   : HW2 Adversarial Robustness")

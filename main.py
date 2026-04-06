@@ -16,7 +16,7 @@ def main() -> None:
     params = get_params()
 
     if params.task == "transfer":
-        from transfer_learning import train_transfer, eval_transfer
+        from transfer_learning import train_transfer
         train_transfer(params)
 
     elif params.task == "distillation":
@@ -24,7 +24,7 @@ def main() -> None:
         run_distillation(params)
 
     elif params.task == "robustness":
-        from AugMix import run_robustness
+        from augmix import run_robustness
         run_robustness(params)
 
     elif params.task == "adversarial":
@@ -37,7 +37,7 @@ def main() -> None:
 
     else:
         print("Unknown task: " + params.task)
-        print("Choose from: mnist, transfer, distillation, robustness, adversarial, cutmix_distillation")
+        print("Choose from: mnist, transfer, distillation, robustness, adversarial, augmix_distillation")
         sys.exit(1)
 
 

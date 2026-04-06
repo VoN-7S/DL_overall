@@ -28,6 +28,7 @@ def validate(
     model.eval()
     teacher = kwargs.get("teacher", False)
     kd_cfg = kwargs.get("kd_cfg", False)
+    total_loss, correct, n = 0.0, 0, 0
     if teacher and kd_cfg:
         for imgs, labels in loader:
             print("batch")

@@ -3,10 +3,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from parameters import KDConfig, TrainingConfig, get_kd_config, get_training_configs
-from augmix import augmixer, cutmix_criterion
-
-
 from typing import Tuple
 
 def train_one_epoch(
@@ -44,7 +40,6 @@ def train_one_epoch(
             with torch.no_grad():
                 t_logits = teacher(imgs)
             loss = criterion(out, t_logits, labels, kd_cfg.temperature, kd_cfg.alpha,)
-            loss = criterion(out, labels)
             loss.backward()
             optimizer.step()
             total_loss += loss.item() * imgs.size(0)
