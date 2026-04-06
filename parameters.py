@@ -95,6 +95,7 @@ def get_params() -> Namespace:
     parser.add_argument("--regularizer", default=2, type=int, choices=[1, 2])
     parser.add_argument("--weight_decay", default=0.0, type=float)
     parser.add_argument("--log_interval", default=10, type=int)
+    parser.add_argument("--train_eval", default = 2, type=int, choices=[0, 1, 2])
 
     # ── Transfer learning ─────────────────────────────────────────────
     parser.add_argument(

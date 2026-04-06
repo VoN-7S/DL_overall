@@ -16,8 +16,8 @@ def main() -> None:
     params = get_params()
 
     if params.task == "transfer":
-        from transfer_learning import run_transfer
-        run_transfer(params)
+        from transfer_learning import train_transfer, eval_transfer
+        train_transfer(params)
 
     elif params.task == "distillation":
         from knowledge_distillation import run_distillation
