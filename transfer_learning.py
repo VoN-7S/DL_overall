@@ -241,50 +241,6 @@ def train_one_option(
         name = folder_name,
     )
 
-def eval_one_option(
-    transfer_cfg: TransferConfig,
-    training_cfg: TrainingConfig,
-    device: torch.device,
-) -> None:
-    """
-    Run a single transfer learning experiment for one option.
-
-    Builds the model and loaders, trains for training_cfg.epoch epochs,
-    saves the best checkpoint, loss curve, and parameters to disk.
-
-    Results saved to:
-        results/transfer/transfer_resize/      (option 1)
-        results/transfer/transfer_layerchange/ (option 2)
-
-    Args:
-        transfer_cfg: TransferConfig with option.
-        training_cfg: TrainingConfig with epoch, learning_rate, etc.
-        device:       Compute device.
-    """
-    set_seed(training_cfg.seed)
-    model_training_method = "Resize" if transfer_cfg.option == 1 else "Layer Change"
-
-    if transfer_cfg.option == 1:
-        model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-        models.resnet18(weights=torch.load("./results/transfer/transfer_layerchange/model.pth"))
-    else:
-        model = build_model_option2().to(device)
-        models.resnet18(weights=torch.load("./results/transfer/transfer_resize/model.pth"))
-
-    new_transforms = transforms.AutoAugment(transforms.AutoAugmentPolicy.CIFAR10)
-    _ , val_loader = get_loaders(transfer_cfg, training_cfg, new_transforms)
-    criterion = nn.CrossEntropyLoss()
-
-
-    val_loss, val_acc = validate(model, val_loader, criterion, device)
-
-    print(
-        f"Model {model_training_method}" +
-        "  val_loss=" + str(round(val_loss, 4)) +
-        "  val_acc=" + str(round(val_acc, 4))
-    )
-
-
 
 def train_transfer(params: Namespace) -> None:
     """
@@ -305,29 +261,6 @@ def train_transfer(params: Namespace) -> None:
 
     for transfer_cfg in transfer_configs:
         train_one_option(transfer_cfg, training_cfg, device)
-
-    print("\nTransfer learning complete.")
-    print("Results saved to: ./results/transfer/")
-
-def eval_transfer(params: Namespace) -> None:
-    """
-    Run all requested transfer learning experiments.
-
-    Reads --tl_option from params and runs one or both options.
-    Each option saves its results to its own subfolder.
-
-    Args:
-        params: Parsed Namespace object from get_params().
-    """
-    transfer_configs = get_transfer_configs(params)
-    training_cfg = get_training_configs(params)
-    device = get_device()
-
-    print("Task: Transfer Learning (CIFAR-10)")
-    print("Device: " + str(device))
-
-    for transfer_cfg in transfer_configs:
-        eval_one_option(transfer_cfg, training_cfg, device)
 
     print("\nTransfer learning complete.")
     print("Results saved to: ./results/transfer/")

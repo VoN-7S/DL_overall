@@ -94,12 +94,12 @@ def train_one_epoch_augmix(
     kd_cfg = kwargs.get("kd_cfg", False)
     if teacher and kd_cfg:
         for imgs, labels in loader:
+            imgs, labels = imgs.to(device), labels.to(device)
             print("batch")
             optimizer.zero_grad()
             out  = model(imgs)
             with torch.no_grad():
                 t_logits = teacher(imgs)
-            criterion()
             loss = criterion(out, t_logits, labels, kd_cfg.temperature, kd_cfg.alpha,)
             loss = criterion(out, labels)
             loss.backward()
@@ -113,6 +113,7 @@ def train_one_epoch_augmix(
             print("batch")
             imgs, metadata = augmixer(imgs, labels)
             imgs = imgs.to(device)
+            labels = labels.to(device)
             optimizer.zero_grad()
             out  = model(imgs)
             loss = cutmix_criterion(criterion, out, metadata)

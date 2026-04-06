@@ -23,9 +23,21 @@ def main() -> None:
         from knowledge_distillation import run_distillation
         run_distillation(params)
 
+    elif params.task == "robustness":
+        from AugMix import run_robustness
+        run_robustness(params)
+
+    elif params.task == "adversarial":
+        from adversarial import run_adversarial
+        run_adversarial(params)
+
+    elif params.task == "augmix_distillation":
+        from knowledge_distillation import run_hw2_distillation
+        run_hw2_distillation(params)
+
     else:
         print("Unknown task: " + params.task)
-        print("Choose from: mnist, transfer, distillation")
+        print("Choose from: mnist, transfer, distillation, robustness, adversarial, cutmix_distillation")
         sys.exit(1)
 
 
