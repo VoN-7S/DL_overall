@@ -121,6 +121,10 @@ def pgd_attack(
     delta = delta.detach().requires_grad_(False)
 
     adv = (imgs + delta).detach()
+    mean = torch.tensor(_CIFAR_MEAN, device=device).view(1, 3, 1, 1)
+    std = torch.tensor(_CIFAR_STD, device=device).view(1, 3, 1, 1)
+    lower = (0.0 - mean) / std
+    upper = (1.0 - mean) / std
 
     for _ in range(steps):
         adv.requires_grad_(True)
@@ -144,13 +148,12 @@ def pgd_attack(
                 factor  = torch.clamp(eps_norm / d_norm, max=1.0)
                 delta   = delta * factor.view(-1, 1, 1, 1)
                 adv     = imgs + delta
-
+        adv = torch.max(torch.min(adv, upper), lower)
         adv = adv.detach()
 
     return adv
 
 
-@torch.no_grad()
 def evaluate_pgd(
     model:   nn.Module,
     loader:  DataLoader,
@@ -179,7 +182,8 @@ def evaluate_pgd(
     for imgs, labels in loader:
         imgs, labels = imgs.to(device), labels.to(device)
         adv = pgd_attack(model, imgs, labels, eps, alpha, steps, norm, device)
-        preds = model(adv).argmax(1)
+        with torch.no_grad():
+            preds = model(adv).argmax(1)
         correct += preds.eq(labels).sum().item()
         n       += labels.size(0)
     return correct / n
@@ -385,8 +389,13 @@ def extract_features(
     model.eval()
 
     # Temporarily remove the FC head to get 512-d embeddings
-    original_fc = model.linear if hasattr(model, "linear") else model.fc
-    model.linear = nn.Identity()
+    if hasattr(model, "linear"):
+        original_fc = model.linear
+        model.linear = nn.Identity()
+    else:
+        original_fc = model.fc
+        model.fc = nn.Identity()
+    
 
     for imgs, lbls in loader:
         imgs = imgs.to(device)
@@ -396,7 +405,10 @@ def extract_features(
         if sum(len(f) for f in features_list) >= n_max:
             break
 
-    model.linear = original_fc
+    if hasattr(model, "linear"):
+        model.linear = original_fc
+    else:
+        model.fc = original_fc
     feats  = np.concatenate(features_list)[:n_max]
     labels = np.concatenate(labels_list)[:n_max]
     return feats, labels
@@ -643,11 +655,11 @@ def run_adversarial(params: Namespace) -> None:
         params: Parsed argparse Namespace.
     """
     from parameters import get_adversarial_config
-    cfg    = get_adversarial_config(params)
+    adv_cfg    = get_adversarial_config(params)
     training_cfg = get_training_configs(params)
     device = get_device()
 
     print("Task   : HW2 Adversarial Robustness")
     print(f"Device : {device}")
 
-    run_task3(cfg, device)
+    run_task3(training_cfg, adv_cfg, device)

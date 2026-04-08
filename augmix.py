@@ -97,13 +97,22 @@ def _get_augmix_train_loader(batch_size: int, num_workers: int) -> DataLoader:
     Each sample is (stacked_views, label) where stacked_views is (3, C, H, W):
     index 0 = clean, 1 = aug1, 2 = aug2.
     """
-    base_tf = T.Compose([
+
+    shared_tf = T.Compose([
         T.RandomCrop(32, padding=4),
         T.RandomHorizontalFlip(),
+    ])
+    post_tf = T.Compose([
         T.ToTensor(),
         T.Normalize(_CIFAR_MEAN, _CIFAR_STD),
     ])
-    augmix_tf = AugMixTransform(base_transform=base_tf, severity=0.5, width=3, alpha=1.0)
+    augmix_tf = AugMixTransform(
+        shared_transform=shared_tf,
+        post_transform=post_tf,
+        severity=0.5,
+        width=3,
+        alpha=1.0,
+    )
     ds = torchvision.datasets.CIFAR10(
         "./data", train=True, download=True, transform=augmix_tf
     )
@@ -322,10 +331,8 @@ def run_task1(train_cfg: TrainingConfig, augmix_cfg: RobustnessConfig, device: t
 
     # Load HW1b fine-tuned model (transfer option 2 = full fine-tune)
     import torchvision.models as tvm
-    model = tvm.resnet18(weights=None)
-    model.conv1  = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-    model.maxpool = nn.Identity()
-    model.fc      = nn.Linear(model.fc.in_features, _NUM_CLASSES)
+    from transfer_learning import build_model_option2
+    model = build_model_option2(10)
     ckpt = augmix_cfg.vanilla_ckpt
     if not os.path.exists(ckpt):
         raise FileNotFoundError(
@@ -392,8 +399,7 @@ def run_task2(
 
     model = ResNet(BasicBlock, [2, 2, 2, 2], num_classes=_NUM_CLASSES).to(device)
     optimizer = torch.optim.SGD(
-        model.parameters(), lr=training_cfg.learning_rate,
-        momentum=0.9, weight_decay=training_cfg.weight_decay,
+        model.parameters(), lr=training_cfg.learning_rate, weight_decay=training_cfg.weight_decay,
     )
 
     train_loader = _get_augmix_train_loader(training_cfg.batch_size, training_cfg.num_workers)

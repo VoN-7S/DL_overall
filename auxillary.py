@@ -241,16 +241,15 @@ class AugMixTransform:
     """
     Drop-in torchvision-compatible transform that returns (x_clean, x_aug1, x_aug2).
 
-    The three views are passed through the base normalization transform and
-    stacked into a single tensor of shape (3, C, H, W) so DataLoader collation
-    works without modification.
+    A shared spatial transform is applied once, then clean/augmented branches
+    are individually postprocessed and stacked into shape (3, C, H, W).
 
     For the Jensen-Shannon loss, unpack with:
         x_clean, x_aug1, x_aug2 = imgs[:, 0], imgs[:, 1], imgs[:, 2]
 
     Args:
-        base_transform: Deterministic transforms applied to ALL views
-                        (e.g. ToTensor + Normalize).
+        shared_transform: Spatial transforms applied once to the base PIL image.
+        post_transform:  Tensor conversion / normalization applied per branch.
         severity:       AugMix operation magnitude in [0, 1].
         width:          Number of chains per augmented view.
         alpha:          Dirichlet / Beta parameter.
@@ -258,20 +257,23 @@ class AugMixTransform:
 
     def __init__(
         self,
-        base_transform: T.Compose,
+        shared_transform: T.Compose,
+        post_transform: T.Compose,
         severity: float = 0.5,
         width: int = 3,
         alpha: float = 1.0,
     ) -> None:
-        self.base_transform = base_transform
+        self.shared_transform = shared_transform
+        self.post_transform = post_transform
         self.severity = severity
         self.width = width
         self.alpha = alpha
 
     def __call__(self, img: Image.Image) -> torch.Tensor:
-        x_clean = self.base_transform(img)
-        x_aug1  = self.base_transform(_augment_and_mix(img, self.severity, self.width, alpha=self.alpha))
-        x_aug2  = self.base_transform(_augment_and_mix(img, self.severity, self.width, alpha=self.alpha))
+        img = self.shared_transform(img)
+        x_clean = self.post_transform(img)
+        x_aug1  = self.post_transform(_augment_and_mix(img, self.severity, self.width, alpha=self.alpha))
+        x_aug2  = self.post_transform(_augment_and_mix(img, self.severity, self.width, alpha=self.alpha))
         return torch.stack([x_clean, x_aug1, x_aug2], dim=0)  # (3, C, H, W)
 
 

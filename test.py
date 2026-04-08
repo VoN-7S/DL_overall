@@ -31,7 +31,6 @@ def validate(
     total_loss, correct, n = 0.0, 0, 0
     if teacher and kd_cfg:
         for imgs, labels in loader:
-            print("batch")
             imgs, labels = imgs.to(device), labels.to(device)
             out  = model(imgs)
             with torch.no_grad():
@@ -43,7 +42,6 @@ def validate(
     else:
 
         for imgs, labels in loader:
-            print("batch")
             imgs, labels = imgs.to(device), labels.to(device)
             out  = model(imgs)
             loss = criterion(out, labels)

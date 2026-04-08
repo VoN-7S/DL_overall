@@ -33,7 +33,6 @@ def train_one_epoch(
     kd_cfg = kwargs.get("kd_cfg", False)
     if teacher and kd_cfg:
         for imgs, labels in loader:
-            print("batch")
             imgs, labels = imgs.to(device), labels.to(device)
             optimizer.zero_grad()
             out  = model(imgs)
@@ -48,7 +47,6 @@ def train_one_epoch(
     else:
 
         for imgs, labels in loader:
-            print("batch")
             imgs, labels = imgs.to(device), labels.to(device)
             optimizer.zero_grad()
             out  = model(imgs)

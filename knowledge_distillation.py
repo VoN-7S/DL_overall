@@ -280,6 +280,7 @@ def run_exp3(
     training_cfg: TrainingConfig,
     device: torch.device,
     teacher_path: str,
+    save_dir: str
 ) -> None:
     """
     Experiment 3: Train SimpleCNN using ResNet-18 teacher (Hinton KD).
@@ -292,7 +293,6 @@ def run_exp3(
         device:       Compute device.
         teacher_path: Path to the best ResNet-18 checkpoint from Exp 2.
     """
-    save_dir = "./results/kd/kd_simplecnn_kd"
     os.makedirs(save_dir, exist_ok=True)
     set_seed(training_cfg.seed)
 
@@ -368,6 +368,7 @@ def run_exp4(
     training_cfg: TrainingConfig,
     device: torch.device,
     teacher_path: str,
+    save_dir: str
 ) -> None:
     """
     Experiment 4: Train MobileNetV2 using ResNet-18 teacher (modified KD).
@@ -383,7 +384,6 @@ def run_exp4(
         device:       Compute device.
         teacher_path: Path to the best ResNet-18 checkpoint from Exp 2.
     """
-    save_dir = "./results/kd/kd_mobilenet"
     os.makedirs(save_dir, exist_ok=True)
     set_seed(training_cfg.seed)
 
@@ -480,12 +480,21 @@ def run_exp4_augmix(kd_cfg: KDConfig, training_cfg: TrainingConfig, device: torc
     print("\n" + "=" * 55)
     print("  Task 4: Hinton KD — AugMix teacher → SimpleCNN")
     print("=" * 55)
-    run_exp3(kd_cfg, training_cfg, device, teacher_path=augmix_ckpt)
+    run_exp3(kd_cfg, 
+             training_cfg, 
+             device, 
+             teacher_path=augmix_ckpt,
+             save_dir="./results/kd/kd_simplecnn_kd_augmix")
  
     print("\n" + "=" * 55)
     print("  Task 4: Modified KD — AugMix teacher → MobileNetV2")
     print("=" * 55)
-    run_exp4(kd_cfg, training_cfg, device, teacher_path=augmix_ckpt)
+    run_exp4(kd_cfg, 
+             training_cfg, 
+             device, 
+             teacher_path=augmix_ckpt, 
+             save_dir="./results/kd/kd_mobilenet_augmix"
+             )
  
  
 # ==============================================================================
@@ -571,7 +580,7 @@ def run_task5(training_cfg: TrainingConfig, device: torch.device) -> None:
     vanilla_teacher_ckpt = "./results/transfer/transfer_layerchange/model.pth"
     augmix_teacher_ckpt  = "./results/hw2/robustness_augmix/model.pth"
     simplecnn_ckpt       = "./results/kd/kd_simplecnn_kd/model.pth"
-    mobilenet_ckpt       = "./results/kd/kd_mobilenet/model.pth"
+    mobilenet_ckpt       = "./results/kd/kd_mobilenet_augmix/model.pth"
  
     results = {}
  
@@ -602,10 +611,8 @@ def run_task5(training_cfg: TrainingConfig, device: torch.device) -> None:
         # Load teacher
         if t_arch == "torchvision_resnet18":
             import torchvision.models as tvm
-            teacher = tvm.resnet18(weights=None)
-            teacher.conv1   = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False)
-            teacher.maxpool = nn.Identity()
-            teacher.fc      = nn.Linear(teacher.fc.in_features, 10)
+            from transfer_learning import build_model_option2
+            teacher = build_model_option2(10)
         else:
             teacher = ResNet(BasicBlock, [2, 2, 2, 2], num_classes=10)
         teacher.load_state_dict(torch.load(t_ckpt, map_location=device))
@@ -719,7 +726,7 @@ def run_distillation(params: Namespace) -> None:
                 )
             teacher_path = default
             print("\n[Teacher] Using default path: " + teacher_path)
-        run_exp3(kd_cfg, training_cfg, device, teacher_path)
+        run_exp3(kd_cfg, training_cfg, device, teacher_path, "./results/kd/kd_simplecnn_kd")
 
     if 4 in experiments:
         if teacher_path is None:
@@ -730,7 +737,7 @@ def run_distillation(params: Namespace) -> None:
                 )
             teacher_path = default
             print("\n[Teacher] Using default path: " + teacher_path)
-        run_exp4(kd_cfg, training_cfg, device, teacher_path)
+        run_exp4(kd_cfg, training_cfg, device, teacher_path, "./results/kd/kd_mobilenet")
 
     print("\nKnowledge distillation complete.")
     print("Results saved to: ./results/kd/")
@@ -754,7 +761,7 @@ def run_hw2_distillation(params: Namespace) -> None:
         run_exp4_augmix(kd_cfg, training_cfg, device)
  
     if params.hw2_task in ("task5", "both"):
-        run_task5(kd_cfg, training_cfg, device)
+        run_task5(training_cfg, device)
  
     print("\nHW2 distillation complete.")
     print("Results saved under: ./results/kd/  and  ./results/hw2/distillation/")
