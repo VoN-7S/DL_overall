@@ -19,7 +19,7 @@ CIFAR-10-C
 Download from: https://zenodo.org/record/2535967
 Expected structure after extraction:
     data/CIFAR-10-C/
-        labels.npy          (50 000,) — same for all corruptions
+        labels.npy          (10 000,) — shared across all corruptions/severities
         brightness.npy      (50 000, 32, 32, 3)
         contrast.npy
         ... (19 files total)
@@ -130,7 +130,9 @@ def _get_cifar10c_loader(
     Build a DataLoader for one CIFAR-10-C (corruption, severity) pair.
 
     CIFAR-10-C stores all 5 severity levels concatenated in a single .npy file
-    of shape (50000, 32, 32, 3). Severity 1 = indices 0-9999, ..., 5 = 40000-49999.
+    of shape (50000, 32, 32, 3). The standard labels.npy contains 10,000 labels
+    shared across all severities, though some local copies may duplicate those
+    labels to length 50,000.
 
     Args:
         corruption: Corruption name (must match filename without .npy).
@@ -148,12 +150,20 @@ def _get_cifar10c_loader(
         return None
 
     data   = np.load(data_path)                     # (50000, 32, 32, 3) uint8
-    labels = np.load(label_path).astype(np.int64)   # (50000,)
+    labels = np.load(label_path).astype(np.int64)
 
     start = (severity - 1) * 10_000
     end   = severity * 10_000
     data   = data[start:end]
-    labels = labels[start:end]
+    if labels.shape[0] == 10_000:
+        # Standard CIFAR-10-C layout: one shared label vector for every severity.
+        pass
+    elif labels.shape[0] == 50_000:
+        labels = labels[start:end]
+    else:
+        raise ValueError(
+            f"Unexpected CIFAR-10-C labels shape {labels.shape}; expected 10000 or 50000 entries."
+        )
 
     # Convert uint8 HWC numpy → float CHW tensor, then normalize
     mean = torch.tensor(_CIFAR_MEAN).view(3, 1, 1)
@@ -435,7 +445,7 @@ def run_task2(
 
     # Plot loss curves
     save_results(
-        params={},
+        params={**asdict(robustness_cfg), **asdict(training_cfg)},
         tloss_list=train_losses,
         vloss_list=val_losses,
         save_dir=save_dir,

@@ -278,6 +278,7 @@ def get_robustness_config(p: Namespace) -> RobustnessConfig:
     """
     return RobustnessConfig(
         vanilla_ckpt  = getattr(p, "vanilla_ckpt",  "./results/transfer/transfer_layerchange/model.pth"),
+        seed          = getattr(p, "seed", 7),
         augmix_lambda = getattr(p, "augmix_lambda", 12.0),
     )
  

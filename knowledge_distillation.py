@@ -460,10 +460,9 @@ def run_exp4_augmix(kd_cfg: KDConfig, training_cfg: TrainingConfig, device: torc
  
     Calls run_exp3 and run_exp4 from knowledge_distillation.py directly,
     passing the AugMix checkpoint as teacher_path.  Results land in:
-        results/kd/kd_simplecnn_kd/   (same folder as HW1b Exp 3)
-        results/kd/kd_mobilenet/       (same folder as HW1b Exp 4)
-    so the two runs overwrite each other — run HW1b Exp 3/4 before Task 4
-    if you need to preserve those results.
+        results/kd/kd_simplecnn_kd_augmix/
+        results/kd/kd_mobilenet_augmix/
+    so the HW2 AugMix-teacher runs stay separate from the HW1b results.
  
     Args:
         kd_cfg:       KDConfig (temperature, alpha, smoothing).
