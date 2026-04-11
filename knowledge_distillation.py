@@ -541,9 +541,12 @@ def run_task5(training_cfg: TrainingConfig, device: torch.device) -> None:
     A large accuracy drop on the student (despite using teacher gradients) means
     the student learned similar decision boundaries.
  
-    Covers two pairs matching HW1b experiments:
-        Vanilla teacher (HW1b)  → SimpleCNN student   (Exp 3)
-        AugMix teacher (Task 2) → MobileNetV2 student (Exp 4)
+    To keep the comparison fair, this evaluates both teacher sources on both
+    student architectures:
+        Vanilla teacher (HW1b)  → SimpleCNN student
+        AugMix teacher (Task 2) → SimpleCNN student
+        Vanilla teacher (HW1b)  → MobileNetV2 student
+        AugMix teacher (Task 2) → MobileNetV2 student
  
     Results saved to: results/hw2/distillation/task5_transferability.json
  
@@ -578,20 +581,28 @@ def run_task5(training_cfg: TrainingConfig, device: torch.device) -> None:
     # Checkpoint paths
     vanilla_teacher_ckpt = "./results/transfer/transfer_layerchange/model.pth"
     augmix_teacher_ckpt  = "./results/hw2/robustness_augmix/model.pth"
-    simplecnn_ckpt       = "./results/kd/kd_simplecnn_kd/model.pth"
-    mobilenet_ckpt       = "./results/kd/kd_mobilenet_augmix/model.pth"
  
     results = {}
  
     pairs = [
         (
             "vanilla_teacher_to_SimpleCNN",
-            vanilla_teacher_ckpt, simplecnn_ckpt,
+            vanilla_teacher_ckpt, "./results/kd/kd_simplecnn_kd/model.pth",
             "torchvision_resnet18", "simplecnn",
         ),
         (
+            "augmix_teacher_to_SimpleCNN",
+            augmix_teacher_ckpt, "./results/kd/kd_simplecnn_kd_augmix/model.pth",
+            "scratch_resnet18", "simplecnn",
+        ),
+        (
+            "vanilla_teacher_to_MobileNetV2",
+            vanilla_teacher_ckpt, "./results/kd/kd_mobilenet/model.pth",
+            "torchvision_resnet18", "mobilenetv2",
+        ),
+        (
             "augmix_teacher_to_MobileNetV2",
-            augmix_teacher_ckpt, mobilenet_ckpt,
+            augmix_teacher_ckpt, "./results/kd/kd_mobilenet_augmix/model.pth",
             "scratch_resnet18", "mobilenetv2",
         ),
     ]
