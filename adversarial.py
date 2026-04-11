@@ -25,6 +25,7 @@ ICLR 2018.  https://openreview.net/forum?id=rJzIBfZAb
 from __future__ import annotations
 
 import os
+import inspect
 from dataclasses import dataclass
 from argparse import Namespace
 from typing import Dict, List, Optional, Tuple
@@ -439,7 +440,18 @@ def plot_tsne(
     all_feats = np.concatenate([clean_feats, adv_feats])
 
     print(f"  Running t-SNE on {len(all_feats)} samples...")
-    tsne   = TSNE(n_components=2, perplexity=30, n_iter=1000, random_state=7)
+    tsne_kwargs = {
+        "n_components": 2,
+        "perplexity": 30,
+        "random_state": 7,
+    }
+    # scikit-learn API changed from n_iter -> max_iter; support both.
+    tsne_params = inspect.signature(TSNE.__init__).parameters
+    if "max_iter" in tsne_params:
+        tsne_kwargs["max_iter"] = 1000
+    else:
+        tsne_kwargs["n_iter"] = 1000
+    tsne = TSNE(**tsne_kwargs)
     coords = tsne.fit_transform(all_feats)
 
     clean_coords = coords[:n]
